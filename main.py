@@ -5,7 +5,7 @@ import schedule
 from datetime import datetime
 
 
-bot = telebot.TeleBot("8887912766:AAEab6aIxhQeKjKjLKVyZVs71ee7dd4ApoY")
+bot = telebot.TeleBot("")
 
 def init_db():
     conn = sqlite3.connect('fridge.db', check_same_thread=False)
@@ -21,9 +21,11 @@ init_db()
 
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("Добавить продукт"), types.KeyboardButton("Удалить продукт"))
-    markup.add(types.KeyboardButton("Мой холодильник"))
+    markup.add(types.KeyboardButton("🥝 Добавить продукт"), types.KeyboardButton("🗑 Удалить продукт"))
+    markup.add(types.KeyboardButton("🥖🥗 Мой холодильник"))
+    markup.add(types.KeyboardButton("🔍 Полезные источники"), types.KeyboardButton("👀 Проверить сроки"))
     return markup
+
 
 
 @bot.message_handler(commands=['start'])
@@ -31,8 +33,27 @@ def send_welcome(message):
     bot.reply_to(message, f'Привет! Я эко-бот, твой умный холодильник!', reply_markup=get_main_keyboard())
 
 
+
+@bot.message_handler(func=lambda message: message.text == "🔍 Полезные источники")
+def useful_links(message):
+    bot.send_message(message.chat.id, 
+    """🌱 **Полезные источники об экологии и хранении продуктов:**
+
+
+🫐 [Cтатья ООН о том, насколько сильно пищевые отходы влияют на экологию](https://news.un.org/ru/story/2026/09/1468800),
+
+🫐 [Сайт с рецептами на любой вкус](https://eda.rambler.ru/)
+🫐 [Ещё один сайт с рецептами](https://art-lunch.ru/)
+
+🫐 [7 способов, как сократить пищевые отходы](https://www.unep.org/ru/novosti-i-istorii/istoriya/sem-sposobov-sokratit-pishchevye-otkhody-i-podderzhat-planetu)
+
+🫐 [Почему сокращение пищевых отходов - это выгодно?](https://news.un.org/ru/story/2025/09/1466494)""",
+     parse_mode="Markdown", disable_web_page_preview=True)  # скрывает превью сайтов
+
+
+
 #    ПОКАЗЫВАЕТ СПИСОК ПРОДУКТОВ СО СРОКАМИ ГОДНОСТИ
-@bot.message_handler(func=lambda message: message.text == "Мой холодильник")
+@bot.message_handler(func=lambda message: message.text == "🥖🥗 Мой холодильник")
 def show_fridge(message):
     user_id = message.from_user.id
 
@@ -47,18 +68,18 @@ def show_fridge(message):
         bot.reply_to(message, "Тут пока пусто")
         return
 
-    response = "Ваши продукты в холодильнике:\n\n"
+    response = "<b>Ваши продукты в холодильнике:</b>\n\n"
     for item in products:
         prod_name = item[0]  # Извлекаем название
         prod_date = item[1]  # Извлекаем дату/срок годности
         response += f"• {prod_name} — до {prod_date}\n"
 
-    bot.reply_to(message, response, parse_mode="Markdown")
+    bot.send_message(message.chat.id, response, parse_mode="HTML")
 
 
 
 #     ДОБАВЛЕНИЕ ПРОДУКТА
-@bot.message_handler(func=lambda message: message.text == "Добавить продукт")
+@bot.message_handler(func=lambda message: message.text == "🥝 Добавить продукт")
 def add_product(message):
     msg = bot.send_message(message.chat.id, "Введите название нового продукта:")
     bot.register_next_step_handler(msg, add_name)
@@ -86,7 +107,7 @@ def add_date(message, name):
 
 
 #     УДАЛЕНИЕ ПРОДУКТА
-@bot.message_handler(func=lambda message: message.text == "Удалить продукт")
+@bot.message_handler(func=lambda message: message.text == "🗑 Удалить продукт")
 def show_delete_menu(message):
     user_id = message.from_user.id
 
@@ -136,6 +157,7 @@ def confirm_delete(call):
 
 
 
+
 #   ФУНКЦИЯ ПРОВЕРКИ
 def check_dates():
     conn = sqlite3.connect('fridge.db')
@@ -151,19 +173,33 @@ def check_dates():
             days_left = (prod_date - today).days
             
             if days_left == 2:
-                bot.send_message(item[0], f"⚠️ Срок '{item[1]}' истекает через 2 дня!")
+                bot.send_message(item[0], f"❗️ Срок годности'{item[1]}' истекает через 2 дня!")
             elif days_left == 0:
-                bot.send_message(item[0], f"🚨 Срок '{item[1]}' истекает сегодня!")
+                bot.send_message(item[0], f"‼️ Срок годности'{item[1]}' истекает сегодня!")
         except ValueError:
             continue
 
-# МАКСИМАЛЬНО КОРОТКИЙ ЗАПУСК ТАЙМЕРА
+
+
+#   ПРОВЕРКА СРОКОВ ВРУЧНУЮ
+@bot.message_handler(func=lambda message: message.text == "👀 Проверить сроки")
+def manual_check(message):
+    bot.reply_to(message, "⏳ Проверяю сроки годности ваших продуктов...")
+    
+    check_dates()     # Запускаем функцию проверки
+    
+    bot.send_message(message.chat.id, "✅ Проверка завершена!")
+
+
+
+
+#  ЗАПУСК ТАЙМЕРА
 if __name__ == '__main__':
     import threading, time
     
-    # Говорим библиотеке выполнять проверку каждый день в 09:00
     schedule.every().day.at("07:00").do(check_dates)
-    
+    schedule.every().day.at("21:00").do(check_dates)
+
     # Запускаем короткий фоновый цикл, который будет крутить это расписание
     threading.Thread(target=lambda: [time.sleep(1) or schedule.run_pending() for _ in iter(int, 1)], daemon=True).start()
 
